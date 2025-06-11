@@ -25,6 +25,7 @@ o	Arrow keys / + / - for keyboard control
 
 
 🧠 Concepts Demonstrated
+
 •	Orbital mechanics with trigonometry
 •	Real-time rendering and animation with requestAnimationFrame
 •	Raycasting for hover and click detection
