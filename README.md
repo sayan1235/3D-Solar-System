@@ -2,7 +2,7 @@
 
 This project is a web-based 3D Solar System simulation built using Three.js. It visualizes the sun and 8 major planets in orbit, with interactive camera and control panels for adjusting camera angles, zoom, and planet orbit speeds.
 
-# 🚀 Features
+## 🚀 Features
 
 •	🪐 Animated orbits of Mercury through Neptune around the Sun
 
@@ -24,25 +24,23 @@ This project is a web-based 3D Solar System simulation built using Three.js. It 
 
 •	📝 Tooltips on hover to show planet names
 
-# 🖥️ How to Run
+## 🖥️ How to Run
 
 1.	Save the provided code as index.html.
 2.	Open it in any modern browser (e.g., Chrome, Firefox).
 3.	Interact using:
    
-o	Sliders on the right to control camera and speeds
+      -Sliders on the right to control camera and speeds
 
-o	Mouse drag for rotating view
+      -Mouse drag for rotating view
 
-o	Mouse wheel to zoom in/out
+      -Mouse wheel to zoom in/out
 
+      -Click on planets to zoom in
 
-o	Click on planets to zoom in
+      -Arrow keys / + / - for keyboard control
 
-o	Arrow keys / + / - for keyboard control
-
-
-# 🧠 Concepts Demonstrated
+## 🧠 Concepts Demonstrated
 
 •	Orbital mechanics with trigonometry
 
