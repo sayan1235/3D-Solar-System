@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Solar System</title>
+  <style>
+    body { margin: 0; overflow: hidden; background-color: black; cursor: default; }
+    canvas { display: block; }
+    #controls {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px;
+      color: white;
+      font-family: sans-serif;
+      max-height: 90vh;
+      overflow-y: auto;
+      border-radius: 10px;
+    }
+    .slider-group { margin-bottom: 10px; }
+    .slider-group label { display: block; font-size: 14px; margin-bottom: 3px; }
+    .slider-group input { width: 150px; }
+    #pauseBtn, #themeToggle, #resetCamera {
+      margin: 5px;
+      padding: 5px 10px;
+      font-size: 14px;
+      cursor: pointer;
+      border: none;
+      border-radius: 3px;
+      background: #4CAF50;
+      color: white;
+    }
+    #pauseBtn:hover, #themeToggle:hover, #resetCamera:hover {
+      background: #45a049;
+    }
+    .tooltip {
+      position: absolute;
+      padding: 4px 8px;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      font-size: 12px;
+      pointer-events: none;
+      display: none;
+      border-radius: 4px;
+    }
+    .control-section {
+      border-bottom: 1px solid #444;
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+    }
+    .control-section h3 {
+      margin: 0 0 10px 0;
+      font-size: 16px;
+      color: #ffcc00;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <div class="control-section">
+      <h3>Camera Controls</h3>
+      <div class="slider-group">
+        <label>Camera Distance</label>
+        <input type="range" id="cameraDistance" min="10" max="100" step="1" value="35">
+      </div>
+      <div class="slider-group">
+        <label>Camera Angle X</label>
+        <input type="range" id="cameraAngleX" min="-90" max="90" step="1" value="0">
+      </div>
+      <div class="slider-group">
+        <label>Camera Angle Y</label>
+        <input type="range" id="cameraAngleY" min="0" max="360" step="1" value="0">
+      </div>
+      <div class="slider-group">
+        <label>Camera Height</label>
+        <input type="range" id="cameraHeight" min="-50" max="50" step="1" value="0">
+      </div>
+      <button id="resetCamera">Reset Camera</button>
+    </div>
+    
+    <div class="control-section">
+      <h3>Planet Speeds</h3>
+      <div id="planetControls"></div>
+    </div>
+  </div>
+  
+  <button id="pauseBtn">Pause</button>
+  <button id="themeToggle">Toggle Theme</button>
+  <div id="tooltip" class="tooltip"></div>
+
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.128/build/three.module.js';
+    window.onload = function () {
+      let isPaused = false;
+      let darkTheme = true;
+      let autoRotateCamera = false;
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      
+      // Camera control variables
+      let cameraDistance = 35;
+      let cameraAngleX = 0; // Elevation angle in degrees
+      let cameraAngleY = 0; // Azimuth angle in degrees
+      let cameraHeight = 0;
+      
+      // Set initial camera position
+      updateCameraPosition();
+
+      const renderer = new THREE.WebGLRenderer();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2();
+      const tooltip = document.getElementById('tooltip');
+      
+      // Mouse control variables
+      let isMouseDown = false;
+      let mouseX = 0;
+      let mouseY = 0;
+      let lastMouseX = 0;
+      let lastMouseY = 0;
+
+      const light = new THREE.PointLight(0xffffff, 2, 0);
+      light.position.set(0, 0, 0);
+      scene.add(light);
+
+      const sunGeometry = new THREE.SphereGeometry(2, 32, 32);
+      const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xffcc00 });
+      const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+      scene.add(sun);
+
+      const starsGeometry = new THREE.BufferGeometry();
+      const starVertices = [];
+      for (let i = 0; i < 10000; i++) {
+        starVertices.push((Math.random() - 0.5) * 2000);
+        starVertices.push((Math.random() - 0.5) * 2000);
+        starVertices.push((Math.random() - 0.5) * 2000);
+      }
+      starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+      const starsMaterial = new THREE.PointsMaterial({ color: 0xffffff });
+      const starField = new THREE.Points(starsGeometry, starsMaterial);
+      scene.add(starField);
+
+      const planetData = [
+        { name: 'Mercury', distance: 5, size: 0.3, speed: 0.02, color: 0xaaaaaa },
+        { name: 'Venus', distance: 7, size: 0.5, speed: 0.015, color: 0xffcc99 },
+        { name: 'Earth', distance: 9, size: 0.5, speed: 0.012, color: 0x3399ff },
+        { name: 'Mars', distance: 11, size: 0.4, speed: 0.01, color: 0xff3300 },
+        { name: 'Jupiter', distance: 14, size: 1.2, speed: 0.008, color: 0xff9966 },
+        { name: 'Saturn', distance: 17, size: 1, speed: 0.006, color: 0xffff66 },
+        { name: 'Uranus', distance: 20, size: 0.7, speed: 0.004, color: 0x66ffff },
+        { name: 'Neptune', distance: 23, size: 0.7, speed: 0.003, color: 0x6666ff }
+      ];
+
+      const planets = [];
+      const planetControlsDiv = document.getElementById('planetControls');
+
+      planetData.forEach(data => {
+        const geo = new THREE.SphereGeometry(data.size, 32, 32);
+        const mat = new THREE.MeshStandardMaterial({ color: data.color });
+        const mesh = new THREE.Mesh(geo, mat);
+        scene.add(mesh);
+        mesh.userData = { angle: 0, speed: data.speed, distance: data.distance, name: data.name };
+        planets.push(mesh);
+
+        const group = document.createElement('div');
+        group.className = 'slider-group';
+        const label = document.createElement('label');
+        label.innerText = `${data.name} Speed`;
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.min = 0;
+        input.max = 0.05;
+        input.step = 0.001;
+        input.value = data.speed;
+        input.oninput = () => {
+          mesh.userData.speed = parseFloat(input.value);
+        };
+        group.appendChild(label);
+        group.appendChild(input);
+        planetControlsDiv.appendChild(group);
+      });
+
+      // Camera control functions
+      function updateCameraPosition() {
+        const angleXRad = (cameraAngleX * Math.PI) / 180;
+        const angleYRad = (cameraAngleY * Math.PI) / 180;
+        
+        camera.position.x = Math.cos(angleXRad) * Math.cos(angleYRad) * cameraDistance;
+        camera.position.y = Math.sin(angleXRad) * cameraDistance + cameraHeight;
+        camera.position.z = Math.cos(angleXRad) * Math.sin(angleYRad) * cameraDistance;
+        
+        camera.lookAt(scene.position);
+      }
+
+      // Camera control event listeners
+      document.getElementById('cameraDistance').addEventListener('input', (e) => {
+        cameraDistance = parseFloat(e.target.value);
+        updateCameraPosition();
+      });
+
+      document.getElementById('cameraAngleX').addEventListener('input', (e) => {
+        cameraAngleX = parseFloat(e.target.value);
+        updateCameraPosition();
+      });
+
+      document.getElementById('cameraAngleY').addEventListener('input', (e) => {
+        cameraAngleY = parseFloat(e.target.value);
+        updateCameraPosition();
+      });
+
+      document.getElementById('cameraHeight').addEventListener('input', (e) => {
+        cameraHeight = parseFloat(e.target.value);
+        updateCameraPosition();
+      });
+
+      document.getElementById('resetCamera').addEventListener('click', () => {
+        cameraDistance = 35;
+        cameraAngleX = 0;
+        cameraAngleY = 0;
+        cameraHeight = 0;
+        
+        // Update slider values
+        document.getElementById('cameraDistance').value = cameraDistance;
+        document.getElementById('cameraAngleX').value = cameraAngleX;
+        document.getElementById('cameraAngleY').value = cameraAngleY;
+        document.getElementById('cameraHeight').value = cameraHeight;
+        
+        updateCameraPosition();
+      });
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        if (!isPaused) {
+          planets.forEach(planet => {
+            planet.userData.angle += planet.userData.speed;
+            planet.position.x = Math.cos(planet.userData.angle) * planet.userData.distance;
+            planet.position.z = Math.sin(planet.userData.angle) * planet.userData.distance;
+          });
+        }
+
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(planets);
+        if (intersects.length > 0) {
+          tooltip.style.display = 'block';
+          tooltip.innerText = intersects[0].object.userData.name;
+        } else {
+          tooltip.style.display = 'none';
+        }
+
+        renderer.render(scene, camera);
+      }
+
+      animate();
+
+      document.getElementById('pauseBtn').addEventListener('click', () => {
+        isPaused = !isPaused;
+        document.getElementById('pauseBtn').innerText = isPaused ? 'Resume' : 'Pause';
+      });
+
+      document.getElementById('themeToggle').addEventListener('click', () => {
+        darkTheme = !darkTheme;
+        const controlsDiv = document.getElementById('controls');
+        document.body.style.backgroundColor = darkTheme ? 'black' : 'white';
+        controlsDiv.style.background = darkTheme ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.7)';
+        controlsDiv.style.color = darkTheme ? 'white' : 'black';
+      });
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      window.addEventListener('mousemove', (event) => {
+        // Update mouse position for raycasting
+        mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        
+        // Handle camera rotation with mouse drag
+        if (isMouseDown) {
+          const deltaX = event.clientX - lastMouseX;
+          const deltaY = event.clientY - lastMouseY;
+          
+          // Update camera angles based on mouse movement
+          cameraAngleY += deltaX * 0.5; // Horizontal rotation
+          cameraAngleX -= deltaY * 0.5; // Vertical rotation (inverted for natural feel)
+          
+          // Clamp vertical angle to prevent flipping
+          cameraAngleX = Math.max(-90, Math.min(90, cameraAngleX));
+          
+          // Keep horizontal angle in 0-360 range
+          if (cameraAngleY < 0) cameraAngleY += 360;
+          if (cameraAngleY >= 360) cameraAngleY -= 360;
+          
+          // Update slider values
+          document.getElementById('cameraAngleX').value = cameraAngleX;
+          document.getElementById('cameraAngleY').value = cameraAngleY;
+          
+          updateCameraPosition();
+          
+          lastMouseX = event.clientX;
+          lastMouseY = event.clientY;
+        }
+        
+        if (tooltip.style.display === 'block') {
+          tooltip.style.left = `${event.clientX + 10}px`;
+          tooltip.style.top = `${event.clientY + 10}px`;
+        }
+      });
+
+      window.addEventListener('mousedown', (event) => {
+        // Only start dragging if not clicking on UI elements
+        if (!event.target.closest('#controls') && 
+            !event.target.closest('#pauseBtn') && 
+            !event.target.closest('#themeToggle')) {
+          isMouseDown = true;
+          lastMouseX = event.clientX;
+          lastMouseY = event.clientY;
+          document.body.style.cursor = 'grabbing';
+        }
+      });
+
+      window.addEventListener('mouseup', () => {
+        isMouseDown = false;
+        document.body.style.cursor = 'default';
+      });
+
+      window.addEventListener('wheel', (event) => {
+        // Zoom with mouse wheel
+        event.preventDefault();
+        const zoomSpeed = 2;
+        if (event.deltaY > 0) {
+          cameraDistance = Math.min(100, cameraDistance + zoomSpeed);
+        } else {
+          cameraDistance = Math.max(10, cameraDistance - zoomSpeed);
+        }
+        
+        document.getElementById('cameraDistance').value = cameraDistance;
+        updateCameraPosition();
+      });
+
+      window.addEventListener('click', (event) => {
+        // Only handle planet clicking if we weren't dragging
+        if (!isMouseDown) {
+          raycaster.setFromCamera(mouse, camera);
+          const intersects = raycaster.intersectObjects(planets);
+          if (intersects.length > 0) {
+            const planet = intersects[0].object;
+            const offset = 4 + planet.geometry.parameters.radius;
+            
+            // Focus camera on clicked planet
+            cameraDistance = offset * 3;
+            cameraAngleX = 15;
+            cameraAngleY = 0;
+            cameraHeight = 0;
+            
+            // Update sliders
+            document.getElementById('cameraDistance').value = cameraDistance;
+            document.getElementById('cameraAngleX').value = cameraAngleX;
+            document.getElementById('cameraAngleY').value = cameraAngleY;
+            document.getElementById('cameraHeight').value = cameraHeight;
+            
+            // Position camera relative to planet
+            const planetPos = planet.position.clone();
+            camera.position.set(
+              planetPos.x + offset,
+              planetPos.y + offset/2,
+              planetPos.z + offset
+            );
+            camera.lookAt(planetPos);
+          }
+        }
+      });
+
+      // Keyboard controls for camera
+      window.addEventListener('keydown', (event) => {
+        const step = 5;
+        switch(event.key) {
+          case 'ArrowLeft':
+            cameraAngleY = (cameraAngleY - step) % 360;
+            document.getElementById('cameraAngleY').value = cameraAngleY;
+            updateCameraPosition();
+            break;
+          case 'ArrowRight':
+            cameraAngleY = (cameraAngleY + step) % 360;
+            document.getElementById('cameraAngleY').value = cameraAngleY;
+            updateCameraPosition();
+            break;
+          case 'ArrowUp':
+            cameraAngleX = Math.min(90, cameraAngleX + step);
+            document.getElementById('cameraAngleX').value = cameraAngleX;
+            updateCameraPosition();
+            break;
+          case 'ArrowDown':
+            cameraAngleX = Math.max(-90, cameraAngleX - step);
+            document.getElementById('cameraAngleX').value = cameraAngleX;
+            updateCameraPosition();
+            break;
+          case '+':
+          case '=':
+            cameraDistance = Math.max(10, cameraDistance - 2);
+            document.getElementById('cameraDistance').value = cameraDistance;
+            updateCameraPosition();
+            break;
+          case '-':
+            cameraDistance = Math.min(100, cameraDistance + 2);
+            document.getElementById('cameraDistance').value = cameraDistance;
+            updateCameraPosition();
+            break;
+        }
+      });
+    };
+  </script>
+</body>
+</html>
